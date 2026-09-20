@@ -1,0 +1,10 @@
+target/
+*.class
+.mvn/
+data/
+*.log
+error_output*.txt
+fresh_output.txt
+full_output.txt
+output.txt
+.DS_Store

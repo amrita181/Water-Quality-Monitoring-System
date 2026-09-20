@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Water Quality Monitor</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<style>
+  body { font-family: Arial, sans-serif; background: #0f172a; color: #f1f5f9; text-align: center; padding: 30px; }
+  h1 { color: #38bdf8; }
+  .cards { display: flex; justify-content: center; gap: 20px; flex-wrap: wrap; margin-top: 30px; }
+  .card { background: #1e293b; border-radius: 12px; padding: 20px 30px; min-width: 150px; box-shadow: 0 0 10px rgba(0,0,0,0.3); }
+  .card h2 { margin: 0; font-size: 28px; }
+  .card p { margin: 5px 0 0; color: #94a3b8; }
+  .safe { color: #4ade80; }
+  .unsafe { color: #f87171; }
+  #status { font-size: 20px; margin-top: 20px; font-weight: bold; }
+  #chartContainer { max-width: 900px; margin: 40px auto; background: #1e293b; border-radius: 12px; padding: 20px; }
+</style>
+</head>
+<body>
+  <h1>💧 Live Water Quality Monitor</h1>
+  <div id="status">Loading...</div>
+  <div class="cards">
+    <div class="card"><h2 id="ph">--</h2><p>pH Level</p></div>
+    <div class="card"><h2 id="turbidity">--</h2><p>Turbidity (NTU)</p></div>
+    <div class="card"><h2 id="temperature">--</h2><p>Temperature (°C)</p></div>
+    <div class="card"><h2 id="flowRate">--</h2><p>Flow Rate (L/min)</p></div>
+  </div>
+
+  <div id="chartContainer">
+    <canvas id="trendChart"></canvas>
+  </div>
+  <div id="alertContainer" style="max-width: 900px; margin: 40px auto; background: #1e293b; border-radius: 12px; padding: 20px; text-align: left;">
+  <h2 style="color: #f87171;">⚠️ Alert Log (Unsafe Readings)</h2>
+  <table style="width: 100%; border-collapse: collapse; margin-top: 15px;">
+    <thead>
+      <tr style="border-bottom: 1px solid #334155;">
+        <th style="padding: 8px; text-align: left;">Time</th>
+        <th style="padding: 8px;">pH</th>
+        <th style="padding: 8px;">Turbidity</th>
+        <th style="padding: 8px;">Temp</th>
+        <th style="padding: 8px;">Flow</th>
+      </tr>
+    </thead>
+    <tbody id="alertBody"></tbody>
+  </table>
+</div>
+<div id="settingsContainer" style="max-width: 900px; margin: 40px auto; background: #1e293b; border-radius: 12px; padding: 20px; text-align: left;">
+  <h2 style="color: #38bdf8;">⚙️ Admin: Safety Thresholds</h2>
+  <div style="display: flex; gap: 20px; flex-wrap: wrap; margin-top: 15px;">
+    <label>pH Min: <input id="phMinInput" type="number" step="0.1" style="width: 80px;"></label>
+    <label>pH Max: <input id="phMaxInput" type="number" step="0.1" style="width: 80px;"></label>
+    <label>Turbidity Max: <input id="turbidityMaxInput" type="number" step="0.1" style="width: 80px;"></label>
+    <button onclick="saveThresholds()" style="background: #38bdf8; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: bold;">Save</button>
+  </div>
+  <p id="settingsStatus" style="margin-top: 10px; color: #94a3b8;"></p>
+</div>
+
+<script>
+let chart;
+
+function initChart() {
+  const ctx = document.getElementById('trendChart').getContext('2d');
+  chart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: [],
+      datasets: [
+        { label: 'pH', data: [], borderColor: '#38bdf8', tension: 0.3 },
+        { label: 'Turbidity (NTU)', data: [], borderColor: '#f87171', tension: 0.3 },
+        { label: 'Temperature (°C)', data: [], borderColor: '#facc15', tension: 0.3 },
+        { label: 'Flow Rate (L/min)', data: [], borderColor: '#4ade80', tension: 0.3 }
+      ]
+    },
+    options: {
+      responsive: true,
+      scales: {
+        x: { ticks: { color: '#94a3b8' } },
+        y: { ticks: { color: '#94a3b8' } }
+      },
+      plugins: {
+        legend: { labels: { color: '#f1f5f9' } }
+      }
+    }
+  });
+}
+
+async function fetchLatest() {
+  try {
+    const res = await fetch('/api/readings/latest');
+    const data = await res.json();
+    document.getElementById('ph').innerText = data.ph.toFixed(2);
+    document.getElementById('turbidity').innerText = data.turbidity.toFixed(2);
+    document.getElementById('temperature').innerText = data.temperature.toFixed(2);
+    document.getElementById('flowRate').innerText = data.flowRate.toFixed(2);
+    const status = document.getElementById('status');
+    if (data.safe) {
+      status.innerText = "✅ Water Quality: SAFE";
+      status.className = "safe";
+    } else {
+      status.innerText = "⚠️ Water Quality: UNSAFE";
+      status.className = "unsafe";
+    }
+  } catch (e) {
+    document.getElementById('status').innerText = "Connection error";
+  }
+}
+
+async function fetchHistory() {
+  try {
+    const res = await fetch('/api/readings');
+    const data = await res.json();
+    const recent = data.slice(-20); // last 20 readings
+
+    chart.data.labels = recent.map(r => {
+      const t = new Date(r.timestamp);
+      return t.getHours() + ':' + String(t.getMinutes()).padStart(2, '0') + ':' + String(t.getSeconds()).padStart(2, '0');
+    });
+    chart.data.datasets[0].data = recent.map(r => r.ph);
+    chart.data.datasets[1].data = recent.map(r => r.turbidity);
+    chart.data.datasets[2].data = recent.map(r => r.temperature);
+    chart.data.datasets[3].data = recent.map(r => r.flowRate);
+    chart.update();
+  } catch (e) {
+    console.error("Chart fetch error", e);
+  }
+}
+
+initChart();
+setInterval(fetchLatest, 3000);
+setInterval(fetchHistory, 3000);
+fetchLatest();
+fetchHistory();
+async function fetchAlerts() {
+  try {
+    const res = await fetch('/api/readings/alerts');
+    const data = await res.json();
+    const recent = data.slice(-10).reverse();
+    const tbody = document.getElementById('alertBody');
+    tbody.innerHTML = recent.map(r => {
+      const t = new Date(r.timestamp);
+      const time = t.getHours() + ':' + String(t.getMinutes()).padStart(2, '0') + ':' + String(t.getSeconds()).padStart(2, '0');
+      return `<tr style="border-bottom: 1px solid #334155;">
+        <td style="padding: 8px;">${time}</td>
+        <td style="padding: 8px; text-align: center;">${r.ph.toFixed(2)}</td>
+        <td style="padding: 8px; text-align: center;">${r.turbidity.toFixed(2)}</td>
+        <td style="padding: 8px; text-align: center;">${r.temperature.toFixed(2)}</td>
+        <td style="padding: 8px; text-align: center;">${r.flowRate.toFixed(2)}</td>
+      </tr>`;
+    }).join('');
+  } catch (e) {
+    console.error("Alert fetch error", e);
+  }
+}
+setInterval(fetchAlerts, 3000);
+fetchAlerts();
+async function loadThresholds() {
+  try {
+    const res = await fetch('/api/thresholds');
+    const data = await res.json();
+    document.getElementById('phMinInput').value = data.phMin;
+    document.getElementById('phMaxInput').value = data.phMax;
+    document.getElementById('turbidityMaxInput').value = data.turbidityMax;
+  } catch (e) {
+    console.error("Threshold load error", e);
+  }
+}
+
+async function saveThresholds() {
+  const phMin = parseFloat(document.getElementById('phMinInput').value);
+  const phMax = parseFloat(document.getElementById('phMaxInput').value);
+  const turbidityMax = parseFloat(document.getElementById('turbidityMaxInput').value);
+  const status = document.getElementById('settingsStatus');
+  try {
+    const res = await fetch('/api/thresholds', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phMin, phMax, turbidityMax })
+    });
+    if (res.ok) {
+      status.innerText = "✅ Thresholds updated successfully";
+      status.style.color = "#4ade80";
+    } else {
+      status.innerText = "❌ Not authorized (admin only)";
+      status.style.color = "#f87171";
+    }
+  } catch (e) {
+    status.innerText = "❌ Error saving thresholds";
+    status.style.color = "#f87171";
+  }
+}
+
+loadThresholds();
+</script>
+</body>
+</html>
