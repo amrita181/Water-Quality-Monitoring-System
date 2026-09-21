@@ -2,7 +2,7 @@
 
 A full-stack IoT-simulated water quality monitoring platform built with Spring Boot. Simulates real-time sensor data (pH, turbidity, temperature, flow rate), persists it to a database, and visualizes it through a live dashboard with role-based admin controls.
 
-**🔗 Live Demo:** _(link coming soon)_
+**🔗 Live Demo:** _(https://water-quality-monitoring-system-a8l2.onrender.com)
 
 ## Features
 - 📡 Simulated multi-sensor data generation (pH, turbidity, temperature, flow rate)
